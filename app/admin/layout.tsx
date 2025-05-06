@@ -1,3 +1,4 @@
+"use client"
 import { SidebarProvider, Sidebar } from "@/components/ui/sidebar"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
