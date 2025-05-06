@@ -9,6 +9,14 @@ const branch = 'main'
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method === 'GET') {
+      // If filename is provided, fetch a single post
+      const { filename } = req.query
+      if (filename) {
+        const ghRes = await octokit.request('GET /repos/{owner}/{repo}/contents/content/{filename}', {
+          owner, repo, path: `content/${filename}`, ref: branch,
+        })
+        return res.status(200).json(ghRes.data)
+      }
       // List blog posts
       const ghRes = await octokit.request('GET /repos/{owner}/{repo}/contents/content', {
         owner, repo, ref: branch,
