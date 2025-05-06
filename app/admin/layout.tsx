@@ -3,15 +3,35 @@ import { SidebarProvider, Sidebar } from "@/components/ui/sidebar"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { useEffect, useState } from "react"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsAdmin(localStorage.getItem("isAdmin") === "true")
+    }
+  }, [])
+
   function handleLogout() {
     if (typeof window !== "undefined") {
       localStorage.removeItem("isAdmin")
+      setIsAdmin(false)
       router.push("/admin/login")
     }
   }
+
+  if (!isAdmin) {
+    // Center the login modal/page
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-950">
+        {children}
+      </div>
+    )
+  }
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">
