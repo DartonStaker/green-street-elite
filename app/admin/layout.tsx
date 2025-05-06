@@ -1,12 +1,13 @@
 "use client"
 import { SidebarProvider, Sidebar } from "@/components/ui/sidebar"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { useEffect, useState } from "react"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
@@ -23,8 +24,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }
 
+  // Always show only the centered login form on /admin/login
+  if (pathname === "/admin/login") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-950">
+        {children}
+      </div>
+    )
+  }
+
   if (!isAdmin) {
-    // Center the login modal/page
+    // Center the login modal/page for any other admin route if not logged in
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-950">
         {children}
