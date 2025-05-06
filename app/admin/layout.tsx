@@ -9,10 +9,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter()
   const pathname = usePathname()
   const [isAdmin, setIsAdmin] = useState(false)
+  const [key, setKey] = useState(0) // force re-render key
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setIsAdmin(localStorage.getItem("isAdmin") === "true")
+      // Listen for localStorage changes (e.g., login/logout in other tabs)
+      const syncAuth = () => {
+        setIsAdmin(localStorage.getItem("isAdmin") === "true")
+        setKey(k => k + 1) // force re-render
+      }
+      window.addEventListener("storage", syncAuth)
+      return () => window.removeEventListener("storage", syncAuth)
     }
   }, [])
 
@@ -20,6 +28,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (typeof window !== "undefined") {
       localStorage.removeItem("isAdmin")
       setIsAdmin(false)
+      setKey(k => k + 1) // force re-render
       router.push("/admin/login")
     }
   }
@@ -44,7 +53,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen" key={key}>
         <Sidebar className="bg-gray-900 text-white w-64 flex-shrink-0 flex flex-col justify-between">
           <div>
             <div className="p-6 text-2xl font-bold border-b border-gray-800">Admin</div>
