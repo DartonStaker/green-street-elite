@@ -1,172 +1,197 @@
 "use client"
-
-import { useState } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useEffect, useState, useRef } from "react"
+import { useRouter } from "next/navigation"
+import { listBlogPosts, createOrUpdateBlogPost, getBlogPost, deleteBlogPost } from "@/lib/github"
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
+import { FormLabel } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { CalendarDays, Edit, Plus, Search, Trash2 } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
+import ReactMarkdown from "react-markdown"
 
-// Mock blog posts data
-const initialBlogPosts = [
-  {
-    id: 1,
-    title: "GSE Team Achieves Victory in Local Tournament",
-    status: "Published",
-    date: "May 1, 2025",
-    category: "Tournaments",
-  },
-  {
-    id: 2,
-    title: "New Training Program Launched for Youth Players",
-    status: "Published",
-    date: "April 22, 2025",
-    category: "Training",
-  },
-  {
-    id: 3,
-    title: "Upcoming UK Tour: What to Expect",
-    status: "Published",
-    date: "April 15, 2025",
-    category: "Tours",
-  },
-  {
-    id: 4,
-    title: "Player Spotlight: Interview with Team Captain",
-    status: "Published",
-    date: "April 8, 2025",
-    category: "Player Spotlight",
-  },
-  {
-    id: 5,
-    title: "Community Outreach: GSE Hosts Free Coaching Clinic",
-    status: "Draft",
-    date: "March 30, 2025",
-    category: "Community",
-  },
-  {
-    id: 6,
-    title: "Season Review: Highlights and Achievements",
-    status: "Draft",
-    date: "March 22, 2025",
-    category: "Season Review",
-  },
-]
+export default function AdminBlog() {
+  const router = useRouter()
+  const [posts, setPosts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [open, setOpen] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [editSha, setEditSha] = useState<string | undefined>(undefined)
+  const [editFilename, setEditFilename] = useState<string>("")
+  const [form, setForm] = useState({ title: "", date: "", cover: "", content: "" })
+  const [submitting, setSubmitting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-export default function AdminBlogPage() {
-  const [blogPosts, setBlogPosts] = useState(initialBlogPosts)
-  const [searchTerm, setSearchTerm] = useState("")
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("isAdmin") !== "true") {
+      router.push("/admin/login")
+    }
+  }, [router])
 
-  const filteredPosts = blogPosts.filter(
-    (post) =>
-      post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      post.category.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  async function fetchPosts() {
+    setLoading(true)
+    setError("")
+    try {
+      const data = await listBlogPosts()
+      setPosts(data)
+    } catch (err) {
+      setError("Failed to load blog posts.")
+    }
+    setLoading(false)
+  }
 
-  const handleDelete = (id: number) => {
-    if (window.confirm("Are you sure you want to delete this post?")) {
-      setBlogPosts(blogPosts.filter((post) => post.id !== id))
+  useEffect(() => {
+    fetchPosts()
+  }, [])
+
+  const handleOpen = () => {
+    setForm({ title: "", date: new Date().toISOString().slice(0, 10), cover: "", content: "" })
+    setEditMode(false)
+    setEditSha(undefined)
+    setEditFilename("")
+    setOpen(true)
+  }
+
+  const handleEdit = async (post: any) => {
+    setEditMode(true)
+    setEditFilename(post.name)
+    setEditSha(post.sha)
+    setOpen(true)
+    try {
+      const data = await getBlogPost(post.name)
+      const content = Buffer.from(data.content, "base64").toString()
+      const match = content.match(/---([\s\S]*?)---([\s\S]*)/)
+      if (match) {
+        const frontmatter = match[1]
+        const body = match[2].trim()
+        const title = frontmatter.match(/title:\s*"([^"]*)"/)?.[1] || ""
+        const date = frontmatter.match(/date:\s*"([^"]*)"/)?.[1] || ""
+        const cover = frontmatter.match(/cover:\s*"([^"]*)"/)?.[1] || ""
+        setForm({ title, date, cover, content: body })
+      }
+    } catch (err) {
+      alert("Failed to load post for editing.")
+      setOpen(false)
+    }
+  }
+
+  const handleChange = (e: any) => {
+    setForm({ ...form, [e.target.name]: e.target.value })
+  }
+
+  const handleImageUpload = async (e: any) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const formData = new FormData()
+    formData.append("file", file)
+    // Use a local API route to handle the upload
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+    })
+    const data = await res.json()
+    if (data.url) {
+      setForm(f => ({ ...f, content: f.content + `\n![${file.name}](${data.url})\n` }))
+    }
+  }
+
+  const handleSubmit = async (e: any) => {
+    e.preventDefault()
+    setSubmitting(true)
+    const filename = editMode ? editFilename : `${form.title.toLowerCase().replace(/\s+/g, "-")}.md`
+    const md = `---\ntitle: "${form.title}"\ndate: "${form.date}"\ncover: "${form.cover}"\n---\n\n${form.content}\n`
+    try {
+      await createOrUpdateBlogPost(filename, md, editSha)
+      setOpen(false)
+      fetchPosts()
+    } catch (err) {
+      alert("Failed to save post.")
+    }
+    setSubmitting(false)
+  }
+
+  const handleDelete = async (post: any) => {
+    if (!window.confirm(`Delete post '${post.name}'?`)) return
+    try {
+      await deleteBlogPost(post.name, post.sha)
+      fetchPosts()
+    } catch (err) {
+      alert("Failed to delete post.")
     }
   }
 
   return (
     <div className="container py-12">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Blog Management</h1>
-          <p className="text-muted-foreground">Manage your blog posts and articles</p>
-        </div>
-        <Button asChild>
-          <Link href="/admin/blog/new">
-            <Plus className="mr-2 h-4 w-4" /> New Post
-          </Link>
-        </Button>
-      </div>
-
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Blog Posts</CardTitle>
-          <CardDescription>View, edit, and manage all your blog content</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search posts..."
-              className="pl-10"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPosts.length > 0 ? (
-                  filteredPosts.map((post) => (
-                    <TableRow key={post.id}>
-                      <TableCell className="font-medium">{post.title}</TableCell>
-                      <TableCell>{post.category}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            post.status === "Published"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
-                          }`}
-                        >
-                          {post.status}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center">
-                          <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
-                          {post.date}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" asChild>
-                            <Link href={`/admin/blog/edit/${post.id}`}>
-                              <Edit className="h-4 w-4" />
-                              <span className="sr-only">Edit</span>
-                            </Link>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive/90"
-                            onClick={() => handleDelete(post.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Delete</span>
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
-                      No posts found.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      <h1 className="text-3xl font-bold mb-6">Blog Post Management</h1>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button className="mb-4 bg-green-600 text-white" onClick={handleOpen}>+ New Post</Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editMode ? "Edit Blog Post" : "New Blog Post"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <FormLabel>Title</FormLabel>
+              <Input name="title" value={form.title} onChange={handleChange} required disabled={editMode} />
+            </div>
+            <div>
+              <FormLabel>Date</FormLabel>
+              <Input name="date" type="date" value={form.date} onChange={handleChange} required />
+            </div>
+            <div>
+              <FormLabel>Cover Image Path</FormLabel>
+              <Input name="cover" value={form.cover} onChange={handleChange} placeholder="/uploads/your-image.jpg" />
+            </div>
+            <div>
+              <FormLabel>Content</FormLabel>
+              <Textarea name="content" value={form.content} onChange={handleChange} rows={8} required />
+            </div>
+            <div>
+              <FormLabel>Upload Image</FormLabel>
+              <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} />
+            </div>
+            <div>
+              <FormLabel>Markdown Preview</FormLabel>
+              <div className="border rounded p-2 bg-gray-50 min-h-[100px]">
+                <ReactMarkdown>{form.content}</ReactMarkdown>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <DialogClose asChild>
+                <Button type="button" variant="outline">Cancel</Button>
+              </DialogClose>
+              <Button type="submit" disabled={submitting}>{submitting ? "Saving..." : editMode ? "Save Changes" : "Save Post"}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+      {loading ? (
+        <p>Loading...</p>
+      ) : error ? (
+        <p className="text-red-500">{error}</p>
+      ) : (
+        <table className="w-full border">
+          <thead>
+            <tr>
+              <th className="border px-2 py-1">Filename</th>
+              <th className="border px-2 py-1">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {posts.map(post => (
+              <tr key={post.name}>
+                <td className="border px-2 py-1">{post.name}</td>
+                <td className="border px-2 py-1">
+                  <button className="mr-2 text-blue-600" onClick={() => handleEdit(post)}>Edit</button>
+                  <button className="text-red-600" onClick={() => handleDelete(post)}>Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   )
 }
