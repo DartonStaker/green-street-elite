@@ -18,7 +18,7 @@ export default function AdminLogin() {
     if (username === ADMIN_USER && password === ADMIN_PASS) {
       if (typeof window !== "undefined") {
         localStorage.setItem("isAdmin", "true")
-        router.push("/admin/dashboard")
+        router.push("/admin")
       }
     } else {
       setError("Invalid credentials")
