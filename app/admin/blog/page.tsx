@@ -1,7 +1,6 @@
 "use client"
 import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { listBlogPosts, createOrUpdateBlogPost, getBlogPost, deleteBlogPost } from "@/lib/github"
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { FormLabel } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
@@ -32,7 +31,8 @@ export default function AdminBlog() {
     setLoading(true)
     setError("")
     try {
-      const data = await listBlogPosts()
+      const res = await fetch("/api/admin/blog")
+      const data = await res.json()
       setPosts(data)
     } catch (err) {
       setError("Failed to load blog posts.")
@@ -58,7 +58,8 @@ export default function AdminBlog() {
     setEditSha(post.sha)
     setOpen(true)
     try {
-      const data = await getBlogPost(post.name)
+      const res = await fetch(`/api/admin/blog?filename=${encodeURIComponent(post.name)}`)
+      const data = await res.json()
       const content = Buffer.from(data.content, "base64").toString()
       const match = content.match(/---([\s\S]*?)---([\s\S]*)/)
       if (match) {
@@ -101,7 +102,19 @@ export default function AdminBlog() {
     const filename = editMode ? editFilename : `${form.title.toLowerCase().replace(/\s+/g, "-")}.md`
     const md = `---\ntitle: "${form.title}"\ndate: "${form.date}"\ncover: "${form.cover}"\n---\n\n${form.content}\n`
     try {
-      await createOrUpdateBlogPost(filename, md, editSha)
+      if (editMode) {
+        await fetch("/api/admin/blog", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename, content: md, sha: editSha }),
+        })
+      } else {
+        await fetch("/api/admin/blog", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename, content: md }),
+        })
+      }
       setOpen(false)
       fetchPosts()
     } catch (err) {
@@ -113,7 +126,11 @@ export default function AdminBlog() {
   const handleDelete = async (post: any) => {
     if (!window.confirm(`Delete post '${post.name}'?`)) return
     try {
-      await deleteBlogPost(post.name, post.sha)
+      await fetch("/api/admin/blog", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: post.name, sha: post.sha }),
+      })
       fetchPosts()
     } catch (err) {
       alert("Failed to delete post.")
