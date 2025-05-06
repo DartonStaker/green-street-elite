@@ -18,6 +18,7 @@ export default function AdminLogin() {
     if (username === ADMIN_USER && password === ADMIN_PASS) {
       if (typeof window !== "undefined") {
         localStorage.setItem("isAdmin", "true")
+        window.dispatchEvent(new Event("storage")) // trigger layout update
         router.push("/admin")
       }
     } else {
